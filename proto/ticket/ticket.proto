@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package ticket;
+
+option go_package = "distributed-ticket-system/proto/ticket";
+
+// ============================================================
+// MESSAGE DEFINITIONS
+// ============================================================
+
+// --- Bully Algorithm (Leader Election) ---
+
+message ElectionRequest {
+  int32  node_id     = 1; // ID of the node initiating the election
+  int64  lamport_time = 2; // Current Lamport clock of sender
+}
+
+message ElectionResponse {
+  bool   ok       = 1; // "OK" = I have a higher ID, I'll take over
+  int32  node_id  = 2; // ID of the responding node
+}
+
+message CoordinatorRequest {
+  int32  leader_id   = 1; // The newly elected leader's ID
+  int64  lamport_time = 2;
+}
+
+message CoordinatorResponse {
+  bool acknowledged = 1;
+}
+
+message HeartbeatRequest {
+  int32  leader_id   = 1;
+  int64  lamport_time = 2;
+}
+
+message HeartbeatResponse {
+  bool   alive    = 1;
+  int32  node_id  = 2;
+}
+
+// --- Ricart-Agrawala (Distributed Mutual Exclusion) ---
+
+message MutexRequest {
+  int32  node_id     = 1; // Requesting node ID
+  int64  lamport_time = 2; // Lamport timestamp of the request
+  string resource     = 3; // The seat ID being requested (e.g., "A1")
+}
+
+message MutexResponse {
+  bool   granted     = 1; // True = REPLY (permission granted)
+  int32  node_id     = 2; // Responding node ID
+  int64  lamport_time = 3;
+}
+
+// --- Booking ---
+
+message BookingRequest {
+  string user_name       = 1;
+  string seat_id         = 2;
+  int32  requesting_node = 3;
+  int64  lamport_time    = 4;
+}
+
+message BookingResponse {
+  bool   success        = 1;
+  string message        = 2;
+  string seat_id        = 3;
+  int32  booked_by_node = 4;
+}
+
+message SeatUpdate {
+  string seat_id     = 1;
+  string status      = 2; // "available" or "booked"
+  string booked_by   = 3; // user name
+  int32  node_id     = 4; // node that processed the booking
+  int64  lamport_time = 5;
+}
+
+message SeatUpdateResponse {
+  bool acknowledged = 1;
+}
+
+message SeatsRequest {}
+
+message SeatsResponse {
+  repeated SeatInfo seats = 1;
+}
+
+message SeatInfo {
+  string seat_id   = 1;
+  string status    = 2;
+  string booked_by = 3;
+}
+
+// --- Node Management ---
+
+message NodeStatusRequest {
+  int32 node_id = 1;
+}
+
+message NodeStatusResponse {
+  int32  node_id      = 1;
+  bool   is_leader    = 2;
+  int32  leader_id    = 3;
+  int64  lamport_time = 4;
+  string state        = 5; // "running", "election", "waiting", etc.
+}
+
+// --- Events (for logging and analytics) ---
+
+message BookingEvent {
+  string event_id   = 1;
+  string event_type = 2; // See EventType constants
+  int32  node_id    = 3;
+  string seat_id    = 4;
+  string user_name  = 5;
+  int64  lamport_time = 6;
+  int64  timestamp   = 7; // Unix timestamp in milliseconds
+  string details     = 8;
+}
+
+// ============================================================
+// SERVICE DEFINITIONS
+// ============================================================
+
+// ElectionService handles Bully Algorithm messages between nodes
+service ElectionService {
+  // A lower-ID node initiates an election to higher-ID nodes
+  rpc Election(ElectionRequest) returns (ElectionResponse);
+  // The winning node announces itself as coordinator to all nodes
+  rpc Coordinator(CoordinatorRequest) returns (CoordinatorResponse);
+  // Leader sends periodic heartbeats to all nodes
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// MutexService handles Ricart-Agrawala mutual exclusion messages
+service MutexService {
+  // A node requests access to a critical section (booking a seat)
+  rpc RequestAccess(MutexRequest) returns (MutexResponse);
+}
+
+// BookingService handles ticket booking operations
+service BookingService {
+  // Submit a booking request
+  rpc RequestBooking(BookingRequest) returns (BookingResponse);
+  // Sync a seat update to other nodes after booking
+  rpc SyncSeat(SeatUpdate) returns (SeatUpdateResponse);
+  // Get all seats and their current status
+  rpc GetAllSeats(SeatsRequest) returns (SeatsResponse);
+}

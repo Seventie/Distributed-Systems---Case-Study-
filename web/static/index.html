@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Ticket Booking System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1>🎫 Distributed Ticket Booking System</h1>
+                <p class="subtitle">Bully Algorithm · Ricart–Agrawala · Lamport Clocks · Apache Beam</p>
+            </div>
+            <a href="demo.html" style="background:linear-gradient(135deg,#1f6feb,#6e40c9);color:white;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:0.875rem;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 0 16px rgba(88,166,255,0.3);">
+                🎬 Interactive Demo Flows
+            </a>
+        </div>
+    </header>
+
+    <main>
+        <!-- ═══ TOP ROW: Node Status + Booking Form ═══ -->
+        <div class="row">
+            <!-- Node Status Panel -->
+            <section class="panel" id="node-panel">
+                <h2>Node Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <span class="label">This Node</span>
+                        <span class="value" id="node-id">—</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">State</span>
+                        <span class="value badge" id="node-state">—</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Leader</span>
+                        <span class="value badge badge-leader" id="leader-id">—</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Lamport Clock</span>
+                        <span class="value badge badge-clock" id="lamport-time">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Election</span>
+                        <span class="value" id="election-status">Idle</span>
+                    </div>
+                </div>
+                <h3>Peer Nodes</h3>
+                <div id="peers-list" class="peers-list">
+                    <p class="muted">Loading...</p>
+                </div>
+                <button class="btn btn-warning" id="btn-trigger-election">Trigger Election</button>
+            </section>
+
+            <!-- Booking Form Panel -->
+            <section class="panel" id="booking-panel">
+                <h2>Book a Seat</h2>
+                <form id="booking-form">
+                    <div class="form-group">
+                        <label for="user-name">Your Name</label>
+                        <input type="text" id="user-name" placeholder="e.g., Alice" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="seat-id">Seat ID</label>
+                        <input type="text" id="seat-id" placeholder="e.g., A1" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Book Seat</button>
+                </form>
+                <div id="booking-result" class="result-box hidden"></div>
+            </section>
+        </div>
+
+        <!-- ═══ SEAT MAP ═══ -->
+        <section class="panel full-width" id="seats-panel">
+            <h2>Seat Map</h2>
+            <div class="seat-legend">
+                <span class="legend-item"><span class="seat-box available"></span> Available</span>
+                <span class="legend-item"><span class="seat-box booked"></span> Booked</span>
+            </div>
+            <div id="seat-grid" class="seat-grid">
+                <p class="muted">Loading seats...</p>
+            </div>
+            <div class="seat-stats">
+                <span>Available: <strong id="avail-count">—</strong></span>
+                <span>Booked: <strong id="booked-count">—</strong></span>
+            </div>
+        </section>
+
+        <!-- ═══ MIDDLE ROW: RA States + Algorithm Flow ═══ -->
+        <div class="row">
+            <!-- Ricart-Agrawala States -->
+            <section class="panel" id="ra-panel">
+                <h2>Ricart–Agrawala States</h2>
+                <div id="ra-states" class="ra-states">
+                    <p class="muted">No active mutex requests</p>
+                </div>
+            </section>
+
+            <!-- Algorithm Flow -->
+            <section class="panel" id="flow-panel">
+                <h2>Algorithm Flow</h2>
+                <div id="algorithm-flow" class="flow-list">
+                    <p class="muted">Waiting for events...</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- ═══ ANALYTICS ═══ -->
+        <section class="panel full-width" id="analytics-panel">
+            <h2>Analytics Summary</h2>
+            <div class="analytics-grid">
+                <div class="analytics-card">
+                    <span class="analytics-value" id="stat-requests">0</span>
+                    <span class="analytics-label">Total Requests</span>
+                </div>
+                <div class="analytics-card success">
+                    <span class="analytics-value" id="stat-success">0</span>
+                    <span class="analytics-label">Successful</span>
+                </div>
+                <div class="analytics-card failure">
+                    <span class="analytics-value" id="stat-failed">0</span>
+                    <span class="analytics-label">Failed</span>
+                </div>
+                <div class="analytics-card">
+                    <span class="analytics-value" id="stat-elections">0</span>
+                    <span class="analytics-label">Elections</span>
+                </div>
+                <div class="analytics-card">
+                    <span class="analytics-value" id="stat-ra">0</span>
+                    <span class="analytics-label">RA Requests</span>
+                </div>
+                <div class="analytics-card">
+                    <span class="analytics-value" id="stat-events">0</span>
+                    <span class="analytics-label">Total Events</span>
+                </div>
+            </div>
+            <h3>Bookings per Seat</h3>
+            <div id="bookings-per-seat" class="bar-chart">
+                <p class="muted">No data yet</p>
+            </div>
+        </section>
+
+        <!-- ═══ EVENT LOG ═══ -->
+        <section class="panel full-width" id="log-panel">
+            <h2>Event Log <span class="badge badge-live" id="sse-status">● LIVE</span></h2>
+            <div class="log-filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="BOOKING">Booking</button>
+                <button class="filter-btn" data-filter="ELECTION">Election</button>
+                <button class="filter-btn" data-filter="RA">RA Mutex</button>
+                <button class="filter-btn" data-filter="HEARTBEAT">Heartbeat</button>
+            </div>
+            <div id="event-log" class="event-log">
+                <p class="muted">Waiting for events...</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Distributed Systems Project — Go · gRPC · Protocol Buffers · Apache Beam · Docker</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,42 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# .gitignore for Distributed Ticket Booking System
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go build output
+/node
+/beam-analytics
+
+# Generated protobuf code (regenerate with scripts/generate_proto.sh)
+proto/ticket/*.pb.go
+
+# Logs
+logs/*.jsonl
+logs/analytics_*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Go vendor (if used)
+vendor/
+
+# Go test
+*.test
+*.prof

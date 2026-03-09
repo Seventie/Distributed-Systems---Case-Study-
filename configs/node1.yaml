@@ -1,0 +1,25 @@
+# Node 1 Configuration
+node:
+  id: 1
+  grpc_port: 50051
+  http_port: 8081
+
+peers:
+  - id: 2
+    address: "localhost"
+    grpc_port: 50052
+  - id: 3
+    address: "localhost"
+    grpc_port: 50053
+
+seats:
+  rows: ["A", "B", "C"]
+  cols_per_row: 4
+  # Generates seats: A1, A2, A3, A4, B1, B2, B3, B4, C1, C2, C3, C4
+
+heartbeat:
+  interval_ms: 2000
+  timeout_ms: 5000
+
+election:
+  timeout_ms: 3000

@@ -1,0 +1,32 @@
+# Node 2 — Multi-Laptop Config
+# Run on: Laptop B
+#
+# HOW TO USE:
+#   1. Replace LAPTOP_A_IP with Laptop A's IP
+#   2. Replace LAPTOP_B_IP with this laptop's IP  (run: ipconfig)
+#   3. Replace LAPTOP_C_IP with Laptop C's IP
+#   Example IP: 192.168.1.11
+#
+node:
+  id: 2
+  grpc_port: 50052
+  http_port: 8082
+
+peers:
+  - id: 1
+    address: "LAPTOP_A_IP"
+    grpc_port: 50051
+  - id: 3
+    address: "LAPTOP_C_IP"
+    grpc_port: 50053
+
+seats:
+  rows: ["A", "B", "C"]
+  cols_per_row: 4
+
+heartbeat:
+  interval_ms: 2000
+  timeout_ms: 5000
+
+election:
+  timeout_ms: 3000

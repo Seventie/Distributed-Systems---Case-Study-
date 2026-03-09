@@ -1,0 +1,24 @@
+# Docker Node 1 — uses container hostnames instead of localhost
+node:
+  id: 1
+  grpc_port: 50051
+  http_port: 8081
+
+peers:
+  - id: 2
+    address: "node2"
+    grpc_port: 50052
+  - id: 3
+    address: "node3"
+    grpc_port: 50053
+
+seats:
+  rows: ["A", "B", "C"]
+  cols_per_row: 4
+
+heartbeat:
+  interval_ms: 2000
+  timeout_ms: 5000
+
+election:
+  timeout_ms: 3000

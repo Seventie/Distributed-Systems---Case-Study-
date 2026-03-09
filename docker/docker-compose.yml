@@ -1,0 +1,75 @@
+# ═══════════════════════════════════════════════════════════
+# Docker Compose — Run 3 nodes locally
+# ═══════════════════════════════════════════════════════════
+#
+# Usage:
+#   docker-compose -f docker/docker-compose.yml up --build
+#
+# Dashboards:
+#   Node 1: http://localhost:8081
+#   Node 2: http://localhost:8082
+#   Node 3: http://localhost:8083
+#
+# To deploy across 3 laptops:
+#   1. Change 'node2' and 'node3' addresses in each config to real IPs
+#   2. Run one service per laptop
+#   3. Ensure firewall allows gRPC (50051-50053) and HTTP (8081-8083)
+# ═══════════════════════════════════════════════════════════
+
+version: "3.8"
+
+services:
+  # ─── Node 1 ───
+  node1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ticket-node1
+    command: ["-config", "/app/configs/docker-node1.yaml"]
+    ports:
+      - "50051:50051"  # gRPC
+      - "8081:8081"    # HTTP Dashboard
+    volumes:
+      - ../logs:/app/logs
+      - ./docker-configs:/app/configs
+    networks:
+      - ticket-net
+    restart: unless-stopped
+
+  # ─── Node 2 ───
+  node2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ticket-node2
+    command: ["-config", "/app/configs/docker-node2.yaml"]
+    ports:
+      - "50052:50052"
+      - "8082:8082"
+    volumes:
+      - ../logs:/app/logs
+      - ./docker-configs:/app/configs
+    networks:
+      - ticket-net
+    restart: unless-stopped
+
+  # ─── Node 3 ───
+  node3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ticket-node3
+    command: ["-config", "/app/configs/docker-node3.yaml"]
+    ports:
+      - "50053:50053"
+      - "8083:8083"
+    volumes:
+      - ../logs:/app/logs
+      - ./docker-configs:/app/configs
+    networks:
+      - ticket-net
+    restart: unless-stopped
+
+networks:
+  ticket-net:
+    driver: bridge
