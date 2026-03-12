@@ -439,6 +439,13 @@ func (ms *MutexService) GetState(resource string) string {
 	}
 }
 
+// ResourceState holds detailed info about the mutex state of a resource
+type ResourceState struct {
+	State           string  `json:"state"`
+	RequestTime     int64   `json:"request_time,omitempty"`
+	DeferredNodeIDs []int32 `json:"deferred_nodes,omitempty"`
+}
+
 // GetAllStates returns RA states for all active resources.
 func (ms *MutexService) GetAllStates() map[string]string {
 	ms.mu.Lock()
@@ -452,6 +459,34 @@ func (ms *MutexService) GetAllStates() map[string]string {
 			result[resource] = "HELD"
 		case StateReleased:
 			result[resource] = "RELEASED"
+		}
+	}
+	return result
+}
+
+// GetDetailedStates returns detailed RA info for all active resources.
+func (ms *MutexService) GetDetailedStates() map[string]ResourceState {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	result := make(map[string]ResourceState)
+	for resource, state := range ms.state {
+		s := "RELEASED"
+		switch state {
+		case StateWanting:
+			s = "WANTING"
+		case StateHeld:
+			s = "HELD"
+		}
+
+		deferredIDs := []int32{}
+		for _, dr := range ms.deferredReplies[resource] {
+			deferredIDs = append(deferredIDs, dr.NodeID)
+		}
+
+		result[resource] = ResourceState{
+			State:           s,
+			RequestTime:     ms.requestTime[resource],
+			DeferredNodeIDs: deferredIDs,
 		}
 	}
 	return result

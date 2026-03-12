@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"distributed-ticket-system/internal/events"
@@ -98,9 +99,6 @@ func (s *Service) BookSeat(userName, seatID string) BookingResult {
 	// Double-check availability (authoritative check under mutex)
 	success := s.seats.Book(seatID, userName)
 
-	// Step 3: Release critical section
-	s.mutex.ReleaseCriticalSection(seatID)
-
 	if success {
 		lamportNow := s.hub.Clock.Tick()
 
@@ -110,8 +108,12 @@ func (s *Service) BookSeat(userName, seatID string) BookingResult {
 		s.hub.Events.Log(events.TypeBookingSuccess, lamportNow, seatID, userName,
 			fmt.Sprintf("Seat '%s' booked for '%s' by Node %d", seatID, userName, myID))
 
-		// Step 4: Sync the seat update to all peers
-		go s.syncSeatToAllPeers(seatID, seats.StatusBooked, userName)
+		// Step 3: Sync the seat update to all peers *BEFORE* releasing the mutex
+		// This ensures consistency across the cluster before anyone else can try to book it.
+		s.syncSeatToAllPeers(seatID, seats.StatusBooked, userName)
+
+		// Step 4: Release critical section
+		s.mutex.ReleaseCriticalSection(seatID)
 
 		return BookingResult{
 			Success:  true,
@@ -122,6 +124,9 @@ func (s *Service) BookSeat(userName, seatID string) BookingResult {
 		}
 	}
 
+	// Step 4: Release critical section even if booking failed
+	s.mutex.ReleaseCriticalSection(seatID)
+
 	// Seat was booked between our initial check and critical section entry
 	msg := fmt.Sprintf("Seat '%s' was already booked by another node", seatID)
 	log.Printf("[Node %d] BOOKING: %s", myID, msg)
@@ -129,15 +134,23 @@ func (s *Service) BookSeat(userName, seatID string) BookingResult {
 	return BookingResult{Success: false, Message: msg, SeatID: seatID, UserName: userName, NodeID: myID}
 }
 
-// syncSeatToAllPeers broadcasts a seat update to all connected peers.
+// syncSeatToAllPeers broadcasts a seat update to all connected peers and waits for them to acknowledge.
 func (s *Service) syncSeatToAllPeers(seatID, status, bookedBy string) {
 	myID := s.hub.NodeID()
 	allPeers := s.hub.GetAllPeerClients()
 
+	if len(allPeers) == 0 {
+		return
+	}
+
+	var wg sync.WaitGroup
 	for peerID, clients := range allPeers {
+		wg.Add(1)
 		go func(id int32, c *node.PeerClients) {
+			defer wg.Done()
+
 			sendTime := s.hub.Clock.SendTime()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			log.Printf("[Node %d] Syncing seat '%s' to Node %d", myID, seatID, id)
@@ -154,6 +167,9 @@ func (s *Service) syncSeatToAllPeers(seatID, status, bookedBy string) {
 			}
 		}(peerID, clients)
 	}
+
+	// Wait for all sync requests to complete (or time out)
+	wg.Wait()
 }
 
 // ═══════════════════════════════════════════════════════════════════════

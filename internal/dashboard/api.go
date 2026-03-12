@@ -165,7 +165,7 @@ func (a *API) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"state":            a.hub.GetState(),
 		"lamport_time":     a.hub.Clock.GetTime(),
 		"election_running": a.bully.IsElectionRunning(),
-		"ra_states":        a.ra.GetAllStates(),
+		"ra_states":        a.ra.GetDetailedStates(),
 		"peers":            peers,
 	}
 	writeJSON(w, resp)

@@ -834,6 +834,121 @@
         .arrow-label.show {
             opacity: 1;
         }
+
+        /* ── Apache Beam Viz ── */
+        .beam-viz-overlay {
+            position: absolute;
+            top: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            background: rgba(13, 17, 23, 0.95);
+            border: 1px solid var(--blue);
+            border-radius: 12px;
+            padding: 24px;
+            z-index: 10;
+            display: none;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 20px rgba(88, 166, 255, 0.2);
+        }
+        
+        .beam-viz-overlay.show {
+            display: block;
+            animation: fadeInScale 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: translateX(-50%) scale(0.9); }
+            to { opacity: 1; transform: translateX(-50%) scale(1); }
+        }
+        
+        .beam-pipeline-box {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .beam-header {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--blue-bright);
+            text-align: center;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        
+        .beam-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+        
+        .beam-stat-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .beam-stat-card label {
+            display: block;
+            font-size: 0.65rem;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+        
+        .beam-stat-card .value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+        
+        .beam-v-divider {
+            height: 1px;
+            background: var(--border);
+            width: 100%;
+        }
+        
+        .beam-chart-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            height: 120px;
+            padding-bottom: 20px;
+            gap: 20px;
+        }
+        
+        .beam-bar {
+            flex: 1;
+            background: linear-gradient(to top, var(--blue), var(--blue-bright));
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            transition: height 1s cubic-bezier(0.4, 0, 0.2, 1);
+            height: var(--height);
+            max-width: 60px;
+        }
+        
+        .beam-bar::after {
+            content: attr(data-label);
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.65rem;
+            color: var(--muted);
+        }
+        
+        .beam-bar span {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--blue-bright);
+        }
+
         /* Completed banner */
         
         .done-banner {
@@ -933,6 +1048,13 @@
       <span class="desc">Message events sync clocks across nodes</span>
       <span class="step-count">7 steps · ~14s</span>
     </button>
+
+            <button class="scenario-btn" data-id="beam" onclick="loadScenario('beam')">
+      <span class="icon">📊</span>
+      <span class="title">GoBeam Analytics</span>
+      <span class="desc">Parallel log processing → stats → reports</span>
+      <span class="step-count">6 steps · ~12s</span>
+    </button>
         </aside>
 
         <!-- ── Main Content ── -->
@@ -1000,6 +1122,33 @@
 
                         <!-- SVG overlay for arrows -->
                         <svg id="msg-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+                    </div>
+
+                    <!-- Apache Beam Special Viz -->
+                    <div id="beam-viz-overlay" class="beam-viz-overlay">
+                        <div class="beam-pipeline-box">
+                            <div class="beam-header">Apache Beam Go Pipeline</div>
+                            <div class="beam-stats-grid">
+                                <div class="beam-stat-card">
+                                    <label>Total Events</label>
+                                    <div class="value" id="beam-total-events">0</div>
+                                </div>
+                                <div class="beam-stat-card">
+                                    <label>Success Rate</label>
+                                    <div class="value" id="beam-success-rate">0%</div>
+                                </div>
+                                <div class="beam-stat-card">
+                                    <label>Parallel Workers</label>
+                                    <div class="value">3 (Direct)</div>
+                                </div>
+                            </div>
+                            <div class="beam-v-divider"></div>
+                            <div class="beam-chart-container">
+                                <div class="beam-bar" style="--height: 0%" data-label="Node1"><span id="beam-bar-1">0</span></div>
+                                <div class="beam-bar" style="--height: 0%" data-label="Node2"><span id="beam-bar-2">0</span></div>
+                                <div class="beam-bar" style="--height: 0%" data-label="Node3"><span id="beam-bar-3">0</span></div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Done banner -->

@@ -568,6 +568,96 @@ const SCENARIOS = {
                 arrows: []
             }
         ]
+    },
+
+    // ──────────────────────────────────────────────────────────────────
+    // 6. APACHE BEAM ANALYTICS
+    // ──────────────────────────────────────────────────────────────────
+    beam: {
+        meta: {
+            icon: '📊',
+            title: 'Apache Beam Pipeline (GoBeam)',
+            desc: 'Aggregate logs from all nodes → Parallel Spark/Flink runner → Real-time business insights'
+        },
+        init: [
+            { id: 1, state: 'active', label: 'Logging…', clock: 12 },
+            { id: 2, state: 'active', label: 'Logging…', clock: 15 },
+            { id: 3, state: 'active', label: 'Logging…', clock: 12 }
+        ],
+        steps: [{
+                title: 'Nodes generating distributed event logs',
+                detail: 'Every booking, election, and failure is written to node*_events.jsonl',
+                logs: [
+                    { node: 'n1', msg: 'Writing event ID=evt_101 to logs/node1_events.jsonl', type: 'info' },
+                    { node: 'n2', msg: 'Writing event ID=evt_102 to logs/node2_events.jsonl', type: 'info' },
+                    { node: 'n3', msg: 'Writing event ID=evt_103 to logs/node3_events.jsonl', type: 'info' }
+                ],
+                nodeUpdates: [
+                    { id: 1, state: 'highlight', label: 'IO Write' },
+                    { id: 2, state: 'highlight', label: 'IO Write' },
+                    { id: 3, state: 'highlight', label: 'IO Write' }
+                ],
+                beamData: { total: 0, rate: 0, bars: [0, 0, 0] }
+            },
+            {
+                title: 'Beam Pipeline starts: Reading all logs',
+                detail: 'GoBeam PartitionedRead — Glob pattern logs/node*.jsonl',
+                logs: [
+                    { node: 'sys', msg: 'Starting GoBeam Analytics Pipeline...', type: 'info' },
+                    { node: 'sys', msg: 'Source: textio.Read(s, "logs/node*.jsonl")', type: '' }
+                ],
+                arrows: [
+                    { from: 1, to: 2, label: 'Reading...', color: 'blue' },
+                    { from: 3, to: 2, label: 'Reading...', color: 'blue' }
+                ],
+                beamData: { total: 150, rate: 0, bars: [10, 5, 8] }
+            },
+            {
+                title: 'ParDo: Parallel Parsing & Filtering',
+                detail: 'Processing elements in parallel across 3 workers',
+                logs: [
+                    { node: 'sys', msg: 'Transform: ParDo(parseEventFn) → Parallel execution', type: 'info' },
+                    { node: 'sys', msg: 'Filtering invalid booking attempts...', type: '' }
+                ],
+                nodeUpdates: [
+                    { id: 1, state: 'cs', label: 'Worker 1' },
+                    { id: 2, state: 'cs', label: 'Worker 2' },
+                    { id: 3, state: 'cs', label: 'Worker 3' }
+                ],
+                beamData: { total: 342, rate: 85, bars: [45, 32, 50] }
+            },
+            {
+                title: 'GroupByKey: Shuffling & Aggregation',
+                detail: 'stats.Count(s, seatIDs) — Grouping data by resource ID',
+                logs: [
+                    { node: 'sys', msg: 'Phase: Distributed Shuffle (GroupByKey)', type: 'warn' },
+                    { node: 'sys', msg: 'Aggregating: total bookings per seat...', type: 'info' }
+                ],
+                beamData: { total: 512, rate: 92, bars: [78, 85, 90] }
+            },
+            {
+                title: 'Pipeline Complete: Results finalized',
+                detail: 'textio.Write results to logs/analytics_output.txt',
+                logs: [
+                    { node: 'sys', msg: '✓ Pipeline execution successful (Duration: 145ms)', type: 'success' },
+                    { node: 'sys', msg: 'REPORT: B2 is the most booked seat!', type: 'success' }
+                ],
+                nodeUpdates: [
+                    { id: 1, state: 'active', label: 'Done' },
+                    { id: 2, state: 'active', label: 'Done' },
+                    { id: 3, state: 'active', label: 'Done' }
+                ],
+                beamData: { total: 840, rate: 94, bars: [95, 88, 100] }
+            },
+            {
+                title: 'Insights visualized on Dashboard',
+                detail: 'Real-time analytics provided to clients via SSE',
+                logs: [
+                    { node: 'sys', msg: 'Updating dashboard with Beam results...', type: 'info' }
+                ],
+                beamData: { total: 840, rate: 94, bars: [95, 88, 100] }
+            }
+        ]
     }
 };
 
@@ -626,6 +716,9 @@ function loadScenario(id) {
 
     // Hide done banner
     document.getElementById('done-banner').classList.remove('show');
+
+    // Hide Beam overlay unless it's a beam scenario
+    document.getElementById('beam-viz-overlay').classList.toggle('show', id === 'beam');
 
     // Dot idle
     setLiveDot(false);
@@ -902,12 +995,29 @@ function advanceStep() {
         addLogs(step.logs);
     }
 
+    // Beam Data Viz
+    if (currentScenario === 'beam' && step.beamData) {
+        updateBeamViz(step.beamData);
+    }
+
     // Progress
     setProgress(currentStep + 1, sc.steps.length);
 
     // Schedule next
     const delay = parseInt(document.getElementById('speed-select').value, 10) || 2000;
     playTimer = setTimeout(advanceStep, delay);
+}
+
+function updateBeamViz(data) {
+    document.getElementById('beam-total-events').textContent = data.total;
+    document.getElementById('beam-success-rate').textContent = data.rate + '%';
+    document.getElementById('beam-bar-1').textContent = data.bars[0];
+    document.getElementById('beam-bar-2').textContent = data.bars[1];
+    document.getElementById('beam-bar-3').textContent = data.bars[2];
+
+    document.querySelectorAll('.beam-bar').forEach((bar, i) => {
+        bar.style.setProperty('--height', data.bars[i] + '%');
+    });
 }
 
 function stopPlay() {

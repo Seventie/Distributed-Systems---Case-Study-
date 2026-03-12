@@ -9,6 +9,8 @@ const API = '';
 // ═══ STATE ═══
 let currentFilter = 'all';
 let eventLog = [];
+let selectedSeat = null;
+let activeRaStates = {};
 const MAX_LOG_ENTRIES = 200;
 const MAX_FLOW_ENTRIES = 50;
 
@@ -95,26 +97,25 @@ async function fetchStatus() {
     // Leader display
     if (data.leader_id === -1 || data.leader_id === undefined) {
         dom.leaderId.textContent = 'None';
-        dom.leaderId.style.background = '#fed7d7';
-        dom.leaderId.style.color = '#742a2a';
+        dom.leaderId.className = 'value badge';
     } else {
         dom.leaderId.textContent = `Node ${data.leader_id}`;
         if (data.is_leader) {
             dom.leaderId.textContent += ' (me)';
         }
-        dom.leaderId.style.background = '';
-        dom.leaderId.style.color = '';
+        dom.leaderId.className = 'value badge badge-leader';
     }
 
     // Election status
     dom.electionStatus.textContent = data.election_running ? '⚡ Running' : 'Idle';
-    dom.electionStatus.style.color = data.election_running ? '#d69e2e' : '';
+    dom.electionStatus.style.color = data.election_running ? '#fbbf24' : '';
 
     // Peers
     renderPeers(data.peers || []);
 
     // RA states
-    renderRAStates(data.ra_states || {});
+    activeRaStates = data.ra_states || {};
+    renderRAStates(activeRaStates);
 }
 
 async function fetchSeats() {
@@ -151,7 +152,7 @@ async function fetchAnalytics() {
 // ═══ BOOKING HANDLER ═══
 
 async function handleBooking(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
 
     const userName = document.getElementById('user-name').value.trim();
     const seatId = document.getElementById('seat-id').value.trim().toUpperCase();
@@ -159,8 +160,12 @@ async function handleBooking(e) {
     if (!userName || !seatId) return;
 
     dom.bookingResult.classList.remove('hidden', 'success', 'failure');
-    dom.bookingResult.textContent = 'Processing...';
-    dom.bookingResult.classList.add('success'); // neutral
+    dom.bookingResult.textContent = '🔒 Acquiring Distributed Lock...';
+    dom.bookingResult.classList.add('success'); 
+    dom.bookingResult.classList.remove('hidden');
+
+    // Force prompt update of seat grid to show "waiting"
+    fetchSeats();
 
     try {
         const resp = await fetch(API + '/api/book', {
@@ -173,21 +178,21 @@ async function handleBooking(e) {
         dom.bookingResult.classList.remove('success', 'failure');
         if (data.success) {
             dom.bookingResult.classList.add('success');
-            dom.bookingResult.textContent = `✓ ${data.message}`;
+            dom.bookingResult.innerHTML = `<span style="font-size:1.2rem">✅</span> ${data.message}`;
+            selectedSeat = null; // Clear selection on success
+            document.getElementById('seat-id').value = '';
         } else {
             dom.bookingResult.classList.add('failure');
-            dom.bookingResult.textContent = `✗ ${data.message}`;
+            dom.bookingResult.innerHTML = `<span style="font-size:1.2rem">❌</span> ${data.message}`;
         }
-        dom.bookingResult.classList.remove('hidden');
-
-        // Refresh seats
-        setTimeout(fetchSeats, 500);
-        setTimeout(fetchAnalytics, 1000);
+        
+        // Refresh seats and analytics
+        fetchSeats();
+        setTimeout(fetchAnalytics, 500);
     } catch (err) {
         dom.bookingResult.classList.remove('success');
         dom.bookingResult.classList.add('failure');
         dom.bookingResult.textContent = `Error: ${err.message}`;
-        dom.bookingResult.classList.remove('hidden');
     }
 }
 
@@ -196,7 +201,7 @@ async function handleBooking(e) {
 async function handleTriggerElection() {
     try {
         await fetch(API + '/api/election', { method: 'POST' });
-        dom.btnElection.textContent = 'Election Triggered!';
+        dom.btnElection.textContent = '⚡ Election Triggered!';
         setTimeout(() => { dom.btnElection.textContent = 'Trigger Election'; }, 2000);
     } catch (err) {
         console.error('Failed to trigger election:', err);
@@ -220,8 +225,9 @@ function setupSSE() {
             addFlowItem(evt);
 
             // Auto-refresh on important events
-            if (evt.event_type.startsWith('BOOKING_') || evt.event_type === 'SEAT_SYNCED') {
-                setTimeout(fetchSeats, 300);
+            if (evt.event_type.startsWith('BOOKING_') || evt.event_type === 'SEAT_SYNCED' || evt.event_type.startsWith('RA_')) {
+                fetchSeats();
+                fetchStatus();
             }
             if (evt.event_type.startsWith('ELECTION_') || evt.event_type === 'LEADER_FAILURE') {
                 setTimeout(fetchStatus, 300);
@@ -249,7 +255,7 @@ function renderPeers(peers) {
         <span class="peer-badge">
             <span class="dot ${p.alive ? 'alive' : 'dead'}"></span>
             Node ${p.node_id}
-            <small>${p.alive ? 'online' : 'offline'}</small>
+            <small style="margin-left:4px; opacity:0.6">${p.alive ? 'online' : 'offline'}</small>
         </span>
     `).join('');
 }
@@ -260,18 +266,51 @@ function renderSeatGrid(seats) {
         return;
     }
 
-    dom.seatGrid.innerHTML = seats.map(s => `
-        <div class="seat ${s.status}" 
-             title="${s.status === 'booked' ? 'Booked by ' + s.booked_by : 'Click to select'}"
-             onclick="selectSeat('${s.id}')">
-            ${s.id}
-        </div>
-    `).join('');
+    dom.seatGrid.innerHTML = seats.map(s => {
+        let classes = `seat ${s.status}`;
+        if (s.id === selectedSeat) classes += ' selected';
+        
+        // Check if this node is currently wanting or holding this seat
+        const ra = activeRaStates[s.id];
+        const raState = ra ? ra.state : null;
+        const deferredCount = (ra && ra.deferred_nodes) ? ra.deferred_nodes.length : 0;
+
+        if (raState === 'WANTING' || raState === 'HELD') {
+            classes += ' waiting';
+            if (raState === 'HELD') classes += ' in-cs';
+        }
+
+        const title = s.status === 'booked' ? 
+            `Booked by ${s.booked_by}` : 
+            (raState ? `Mutex: ${raState}${deferredCount > 0 ? ` (${deferredCount} nodes waiting)` : ''}` : 'Click to select');
+        
+        return `
+            <div class="${classes}" 
+                 title="${title}"
+                 onclick="selectSeat('${s.id}', '${s.status}')">
+                <span>${s.id}</span>
+                ${s.status === 'booked' ? '<small class="seat-label">BOOKED</small>' : ''}
+                ${deferredCount > 0 ? `<div class="queue-badge" title="${deferredCount} others waiting">${deferredCount}</div>` : ''}
+                ${raState === 'WANTING' ? '<div class="ra-indicator wanting"></div>' : ''}
+                ${raState === 'HELD' ? '<div class="ra-indicator held"></div>' : ''}
+            </div>
+        `;
+    }).join('');
 }
 
-function selectSeat(seatId) {
-    document.getElementById('seat-id').value = seatId;
-    document.getElementById('user-name').focus();
+function selectSeat(seatId, status) {
+    if (status === 'booked') return;
+    
+    if (selectedSeat === seatId) {
+        selectedSeat = null;
+        document.getElementById('seat-id').value = '';
+    } else {
+        selectedSeat = seatId;
+        document.getElementById('seat-id').value = seatId;
+        document.getElementById('user-name').focus();
+    }
+    renderSeatGrid([]); // This is a bit of a hack to force a rerender, better to pass existing data
+    fetchSeats(); // Proper refresh
 }
 
 function renderRAStates(states) {
@@ -281,12 +320,28 @@ function renderRAStates(states) {
         return;
     }
 
-    dom.raStates.innerHTML = entries.map(([resource, state]) => `
-        <div class="ra-state-item">
-            <span>Seat ${resource}</span>
-            <span class="state-badge ${state.toLowerCase()}">${state}</span>
-        </div>
-    `).join('');
+    dom.raStates.innerHTML = entries.map(([resource, data]) => {
+        const state = data.state;
+        const deferred = data.deferred_nodes || [];
+        const badgeClass = state === 'WANTING' ? 'ra' : 'booking';
+        
+        return `
+            <div class="ra-state-item">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:700">Seat ${resource}</span>
+                    <span class="flow-badge ${badgeClass}">${state}</span>
+                </div>
+                ${deferred.length > 0 ? `
+                    <div class="deferred-list">
+                        <span class="muted" style="font-size:0.7rem">Deferred Replies:</span>
+                        <div style="display:flex; gap:4px; margin-top:4px">
+                            ${deferred.map(id => `<span class="mini-badge">Node ${id}</span>`).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
 }
 
 function renderBookingsPerSeat(data) {
@@ -297,14 +352,14 @@ function renderBookingsPerSeat(data) {
     }
 
     const maxCount = Math.max(...entries.map(([_, c]) => c), 1);
-    const maxHeight = 60;
+    const maxBarHeight = 80;
 
     dom.bookingsPerSeat.innerHTML = entries
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([seat, count]) => `
             <div class="bar-item">
                 <span class="bar-value">${count}</span>
-                <div class="bar" style="height: ${Math.max(4, (count / maxCount) * maxHeight)}px"></div>
+                <div class="bar" style="height: ${Math.max(4, (count / maxCount) * maxBarHeight)}px; background: var(--primary-gradient)"></div>
                 <span class="bar-label">${seat}</span>
             </div>
         `).join('');
@@ -334,13 +389,18 @@ function renderEventLog() {
     }
 
     dom.eventLogEl.innerHTML = recent.map(e => {
-        const time = new Date(e.timestamp).toLocaleTimeString();
+        const date = new Date(e.timestamp);
+        const time = date.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
         return `
-            <div class="log-entry">
-                <span class="log-time">${time}</span>
-                <span class="log-type ${e.event_type}">${e.event_type}</span>
-                <span class="log-detail">${escapeHtml(e.details)}</span>
-                <span class="log-lamport">L${e.lamport_time}</span>
+            <div class="log-entry ${e.event_type}" style="padding: 10px 16px; margin-bottom: 4px; border-radius: 8px">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span class="log-time" style="font-weight:700; color:var(--info)">${time}</span>
+                    <span class="log-lamport" style="font-size:0.75rem">L${e.lamport_time}</span>
+                </div>
+                <div style="margin-top:4px; display:flex; gap:10px; align-items:flex-start">
+                    <span class="badge" style="background:rgba(255,255,255,0.1); font-size:0.65rem; white-space:nowrap">${e.event_type}</span>
+                    <span class="log-detail" style="font-size:0.85rem">${escapeHtml(e.details)}</span>
+                </div>
             </div>
         `;
     }).join('');
@@ -364,23 +424,23 @@ function addFlowItem(evt) {
 
     // Friendly label
     const labels = {
-        'NODE_STARTED': '🟢 Node Started',
-        'BOOKING_REQUEST': '📋 Booking Request',
-        'BOOKING_SUCCESS': '✅ Seat Booked',
-        'BOOKING_FAILED': '❌ Booking Failed',
-        'ELECTION_START': '⚡ Election Started',
-        'ELECTION_OK': '👍 Election OK',
-        'ELECTION_COORDINATOR': '👑 New Leader Elected',
-        'LEADER_FAILURE': '💀 Leader Failed',
-        'RA_REQUEST_SENT': '📤 RA Request Sent',
-        'RA_REQUEST_RECEIVED': '📥 RA Request Received',
-        'RA_REPLY_SENT': '↩️ RA Reply Sent',
-        'RA_REPLY_RECEIVED': '✉️ RA Reply Received',
-        'RA_ENTER_CS': '🔒 Entered Critical Section',
-        'RA_EXIT_CS': '🔓 Exited Critical Section',
+        'NODE_STARTED': '🚀 Node Online',
+        'BOOKING_REQUEST': '📝 Requesting Seat',
+        'BOOKING_SUCCESS': '🎉 Booking Confirmed',
+        'BOOKING_FAILED': '⚠️ Booking Refused',
+        'ELECTION_START': '⚡ Election Start',
+        'ELECTION_OK': '👍 Vote: OK',
+        'ELECTION_COORDINATOR': '👑 New Leader Active',
+        'LEADER_FAILURE': '💀 Leader Offline',
+        'RA_REQUEST_SENT': '📤 Mutex Request Sent',
+        'RA_REQUEST_RECEIVED': '📥 Mutex Request Received',
+        'RA_REPLY_SENT': '↩️ Mutex Permission Given',
+        'RA_REPLY_RECEIVED': '✉️ Mutex Permission Received',
+        'RA_ENTER_CS': '🔒 Critical Section: LOCKED',
+        'RA_EXIT_CS': '🔓 Critical Section: RELEASED',
         'HEARTBEAT_SENT': '💓 Heartbeat Sent',
         'HEARTBEAT_RECEIVED': '💓 Heartbeat Received',
-        'SEAT_SYNCED': '🔄 Seat Synced',
+        'SEAT_SYNCED': '🔄 Cluster Sync: Done',
     };
 
     const label = labels[evt.event_type] || evt.event_type;
@@ -388,9 +448,9 @@ function addFlowItem(evt) {
 
     const html = `
         <div class="flow-item">
-            <span class="flow-badge ${category}">${category.toUpperCase()}</span>
-            <span class="flow-text">${label}</span>
-            <span class="flow-time">L${evt.lamport_time} · ${time}</span>
+            <span class="flow-badge ${category}">${category}</span>
+            <span class="flow-text" style="font-weight:600">${label}</span>
+            <span class="flow-time" style="opacity:0.6">@ L${evt.lamport_time}</span>
         </div>
     `;
 
