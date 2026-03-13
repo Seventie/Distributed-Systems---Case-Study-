@@ -10,6 +10,9 @@ peers:
   - id: 1
     address: "10.12.100.252"
     grpc_port: 50051
+  - id: 3
+    address: "10.12.100.170"
+    grpc_port: 50053
 
 seats:
   rows: ["A", "B", "C"]
