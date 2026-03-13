@@ -40,6 +40,8 @@ const dom = {
     statRA: document.getElementById('stat-ra'),
     statEvents: document.getElementById('stat-events'),
     bookingsPerSeat: document.getElementById('bookings-per-seat'),
+    releaseForm: document.getElementById('release-form'),
+    btnResetSeats: document.getElementById('btn-reset-seats'),
 };
 
 // ═══ INITIALIZATION ═══
@@ -60,6 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Set up event handlers
     dom.bookingForm.addEventListener('submit', handleBooking);
+    dom.releaseForm.addEventListener('submit', handleRelease);
+    dom.btnResetSeats.addEventListener('click', handleResetSeats);
     dom.btnElection.addEventListener('click', handleTriggerElection);
 
     // Filter buttons
@@ -193,6 +197,44 @@ async function handleBooking(e) {
         dom.bookingResult.classList.remove('success');
         dom.bookingResult.classList.add('failure');
         dom.bookingResult.textContent = `Error: ${err.message}`;
+    }
+}
+
+async function handleRelease(e) {
+    if (e) e.preventDefault();
+    const seatId = document.getElementById('release-seat-id').value.trim().toUpperCase();
+    if (!seatId) return;
+
+    try {
+        const resp = await fetch(API + '/api/release', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seat_id: seatId })
+        });
+        const data = await resp.json();
+        
+        if (data.success) {
+            document.getElementById('release-seat-id').value = '';
+            fetchSeats();
+            setTimeout(fetchAnalytics, 500);
+        } else {
+            alert(`Release failed: ${data.message}`);
+        }
+    } catch (err) {
+        console.error('Release error:', err);
+    }
+}
+
+async function handleResetSeats() {
+    if (!confirm('Are you sure you want to reset ALL seats to available?')) return;
+
+    try {
+        await fetch(API + '/api/reset', { method: 'POST' });
+        fetchSeats();
+        fetchAnalytics();
+        alert('All seats have been reset.');
+    } catch (err) {
+        console.error('Reset error:', err);
     }
 }
 

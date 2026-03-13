@@ -103,6 +103,19 @@ func (s *Store) Book(seatID, userName string) bool {
 	return true
 }
 
+// Release marks a seat as available again.
+func (s *Store) Release(seatID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seat, exists := s.seats[seatID]
+	if !exists {
+		return false
+	}
+	seat.Status = StatusAvailable
+	seat.BookedBy = ""
+	return true
+}
+
 // ForceUpdate updates a seat's state directly (used for sync from other nodes).
 func (s *Store) ForceUpdate(seatID, status, bookedBy string) {
 	s.mu.Lock()

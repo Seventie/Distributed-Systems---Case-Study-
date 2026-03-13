@@ -134,6 +134,39 @@ func (s *Service) BookSeat(userName, seatID string) BookingResult {
 	return BookingResult{Success: false, Message: msg, SeatID: seatID, UserName: userName, NodeID: myID}
 }
 
+// ReleaseSeat releases a booked seat and syncs it across the cluster.
+func (s *Service) ReleaseSeat(seatID string) BookingResult {
+	myID := s.hub.NodeID()
+	
+	if !s.seats.SeatExists(seatID) {
+		return BookingResult{Success: false, Message: "Seat not found", SeatID: seatID, NodeID: myID}
+	}
+
+	success := s.seats.Release(seatID)
+	if success {
+		log.Printf("[Node %d] RELEASE: Seat '%s' released", myID, seatID)
+		s.hub.Events.LogSimple(events.TypeSeatSynced, s.hub.Clock.Tick(), 
+			fmt.Sprintf("Seat '%s' released by Node %d", seatID, myID))
+		
+		// Sync to all peers
+		s.syncSeatToAllPeers(seatID, seats.StatusAvailable, "")
+		return BookingResult{Success: true, Message: "Seat released", SeatID: seatID, NodeID: myID}
+	}
+	
+	return BookingResult{Success: false, Message: "Failed to release seat", SeatID: seatID, NodeID: myID}
+}
+
+// ResetSeats resets all seats and syncs to all peers.
+func (s *Service) ResetSeats() {
+	s.seats.Reset()
+	s.hub.Events.LogSimple(events.TypeSeatSynced, s.hub.Clock.Tick(), "All seats reset to available")
+	
+	allSeats := s.seats.GetAllSeats()
+	for _, seat := range allSeats {
+		s.syncSeatToAllPeers(seat.ID, seats.StatusAvailable, "")
+	}
+}
+
 // syncSeatToAllPeers broadcasts a seat update to all connected peers and waits for them to acknowledge.
 func (s *Service) syncSeatToAllPeers(seatID, status, bookedBy string) {
 	myID := s.hub.NodeID()

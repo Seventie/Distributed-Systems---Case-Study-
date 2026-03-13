@@ -1,10 +1,13 @@
-# Node 1 Configuration
+# Node 4 Configuration
 node:
-  id: 1
-  grpc_port: 50051
-  http_port: 8081
+  id: 4
+  grpc_port: 50054
+  http_port: 8084
 
 peers:
+  - id: 1
+    address: "localhost"
+    grpc_port: 50051
   - id: 2
     address: "localhost"
     grpc_port: 50052

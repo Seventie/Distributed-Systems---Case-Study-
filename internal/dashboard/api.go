@@ -63,6 +63,8 @@ func (a *API) Start(port int) {
 	mux.HandleFunc("/api/status", a.corsMiddleware(a.handleStatus))
 	mux.HandleFunc("/api/events", a.corsMiddleware(a.handleEvents))
 	mux.HandleFunc("/api/analytics", a.corsMiddleware(a.handleAnalytics))
+	mux.HandleFunc("/api/release", a.corsMiddleware(a.handleRelease))
+	mux.HandleFunc("/api/reset", a.corsMiddleware(a.handleReset))
 	mux.HandleFunc("/api/election", a.corsMiddleware(a.handleTriggerElection))
 	mux.HandleFunc("/api/stream", a.handleSSE)
 
@@ -134,6 +136,36 @@ func (a *API) handleBook(w http.ResponseWriter, r *http.Request) {
 
 	result := a.booking.BookSeat(req.UserName, req.SeatID)
 	writeJSON(w, result)
+}
+
+// POST /api/release — Release a booked seat
+func (a *API) handleRelease(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+
+	var req struct {
+		SeatID string `json:"seat_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	result := a.booking.ReleaseSeat(req.SeatID)
+	writeJSON(w, result)
+}
+
+// POST /api/reset — Reset all seats to available
+func (a *API) handleReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+
+	a.booking.ResetSeats()
+	writeJSON(w, map[string]string{"message": "All seats reset"})
 }
 
 // GET /api/seats — Get all seats and their status

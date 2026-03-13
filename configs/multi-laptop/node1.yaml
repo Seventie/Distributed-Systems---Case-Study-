@@ -19,6 +19,9 @@ peers:
   - id: 3
     address: "LAPTOP_C_IP"
     grpc_port: 50053
+  - id: 4
+    address: "LAPTOP_D_IP"
+    grpc_port: 50054
 
 seats:
   rows: ["A", "B", "C"]
