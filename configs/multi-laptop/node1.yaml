@@ -1,12 +1,6 @@
 # Node 1 — Multi-Laptop Config
-# Run on: Laptop A
-#
-# HOW TO USE:
-#   1. Replace LAPTOP_A_IP with this laptop's IP  (run: ipconfig)
-#   2. Replace LAPTOP_B_IP with Laptop B's IP
-#   3. Replace LAPTOP_C_IP with Laptop C's IP
-#   Example IP: 192.168.1.10
-#
+# Run on: Laptop A (Your laptop: 10.12.100.252)
+
 node:
   id: 1
   grpc_port: 50051
@@ -14,14 +8,12 @@ node:
 
 peers:
   - id: 2
-    address: "LAPTOP_B_IP"
+    address: "10.12.116.4"
     grpc_port: 50052
+  # Keep id 3 in case you add a third laptop later
   - id: 3
     address: "LAPTOP_C_IP"
     grpc_port: 50053
-  - id: 4
-    address: "LAPTOP_D_IP"
-    grpc_port: 50054
 
 seats:
   rows: ["A", "B", "C"]
@@ -29,7 +21,7 @@ seats:
 
 heartbeat:
   interval_ms: 2000
-  timeout_ms: 5000
+  timeout_ms: 10000
 
 election:
-  timeout_ms: 3000
+  timeout_ms: 5000
