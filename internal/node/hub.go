@@ -122,41 +122,47 @@ func (h *Hub) GetState() string {
 
 // ---------- Peer Connection Management ----------
 
-// ConnectToPeers establishes gRPC connections to all configured peers.
-// Connections are attempted with retries; failures are logged but not fatal.
+// ConnectToPeers establishes gRPC connections to all configured peers concurrently.
 func (h *Hub) ConnectToPeers() {
+	var wg sync.WaitGroup
 	for _, peer := range h.Config.Peers {
-		addr := peer.PeerAddress()
-		log.Printf("[Node %d] Connecting to peer Node %d at %s...", h.Config.Node.ID, peer.ID, addr)
+		wg.Add(1)
+		go func(p config.PeerConfig) {
+			defer wg.Done()
+			addr := p.PeerAddress()
+			log.Printf("[Node %d] Connecting to peer Node %d at %s...", h.Config.Node.ID, p.ID, addr)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		conn, err := grpc.DialContext(ctx, addr,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
-		)
-		cancel()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 
-		if err != nil {
-			log.Printf("[Node %d] WARNING: Could not connect to Node %d at %s: %v",
-				h.Config.Node.ID, peer.ID, addr, err)
+			conn, err := grpc.DialContext(ctx, addr,
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithBlock(),
+			)
+
+			if err != nil {
+				log.Printf("[Node %d] WARNING: Could not connect to Node %d at %s: %v",
+					h.Config.Node.ID, p.ID, addr, err)
+				h.mu.Lock()
+				h.peerAlive[p.ID] = false
+				h.mu.Unlock()
+				return
+			}
+
 			h.mu.Lock()
-			h.peerAlive[peer.ID] = false
+			h.peerConns[p.ID] = conn
+			h.peerClients[p.ID] = &PeerClients{
+				Election: pb.NewElectionServiceClient(conn),
+				Mutex:    pb.NewMutexServiceClient(conn),
+				Booking:  pb.NewBookingServiceClient(conn),
+			}
+			h.peerAlive[p.ID] = true
 			h.mu.Unlock()
-			continue
-		}
 
-		h.mu.Lock()
-		h.peerConns[peer.ID] = conn
-		h.peerClients[peer.ID] = &PeerClients{
-			Election: pb.NewElectionServiceClient(conn),
-			Mutex:    pb.NewMutexServiceClient(conn),
-			Booking:  pb.NewBookingServiceClient(conn),
-		}
-		h.peerAlive[peer.ID] = true
-		h.mu.Unlock()
-
-		log.Printf("[Node %d] Connected to peer Node %d", h.Config.Node.ID, peer.ID)
+			log.Printf("[Node %d] Connected to peer Node %d", h.Config.Node.ID, p.ID)
+		}(peer)
 	}
+	wg.Wait()
 }
 
 // ConnectToPeer establishes or re-establishes a connection to a specific peer.

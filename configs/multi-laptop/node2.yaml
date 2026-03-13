@@ -10,10 +10,6 @@ peers:
   - id: 1
     address: "10.12.100.252"
     grpc_port: 50051
-  # Keep id 3 in case you add a third laptop later 
-  - id: 3  
-    address: "LAPTOP_C_IP"
-    grpc_port: 50053
 
 seats:
   rows: ["A", "B", "C"]
