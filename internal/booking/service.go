@@ -170,9 +170,10 @@ func (s *Service) ResetSeats() {
 // syncSeatToAllPeers broadcasts a seat update to all connected peers and waits for them to acknowledge.
 func (s *Service) syncSeatToAllPeers(seatID, status, bookedBy string) {
 	myID := s.hub.NodeID()
+	// Get all peer stubs (Hub now returns offline ones too)
 	allPeers := s.hub.GetAllPeerClients()
 
-	if len(allPeers) == 0 {
+	if len(allPeers) == 0 && len(s.hub.Config.Peers) == 0 {
 		return
 	}
 

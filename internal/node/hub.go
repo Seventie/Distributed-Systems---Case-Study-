@@ -123,46 +123,51 @@ func (h *Hub) GetState() string {
 // ---------- Peer Connection Management ----------
 
 // ConnectToPeers establishes gRPC connections to all configured peers concurrently.
+// It also starts a background goroutine to periodically retry failed connections.
 func (h *Hub) ConnectToPeers() {
-	var wg sync.WaitGroup
 	for _, peer := range h.Config.Peers {
-		wg.Add(1)
-		go func(p config.PeerConfig) {
-			defer wg.Done()
-			addr := p.PeerAddress()
-			log.Printf("[Node %d] Connecting to peer Node %d at %s...", h.Config.Node.ID, p.ID, addr)
+		go h.connectWithRetry(peer)
+	}
+}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
+func (h *Hub) connectWithRetry(p config.PeerConfig) {
+	addr := p.PeerAddress()
+	for h.isAlive {
+		h.mu.RLock()
+		alreadyConnected := h.peerAlive[p.ID]
+		h.mu.RUnlock()
 
+		if !alreadyConnected {
+			log.Printf("[Node %d] Attempting to connect to peer Node %d at %s...", h.Config.Node.ID, p.ID, addr)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			conn, err := grpc.DialContext(ctx, addr,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock(),
 			)
+			cancel()
 
-			if err != nil {
-				log.Printf("[Node %d] WARNING: Could not connect to Node %d at %s: %v",
-					h.Config.Node.ID, p.ID, addr, err)
+			if err == nil {
 				h.mu.Lock()
-				h.peerAlive[p.ID] = false
+				if old, ok := h.peerConns[p.ID]; ok {
+					old.Close()
+				}
+				h.peerConns[p.ID] = conn
+				h.peerClients[p.ID] = &PeerClients{
+					Election: pb.NewElectionServiceClient(conn),
+					Mutex:    pb.NewMutexServiceClient(conn),
+					Booking:  pb.NewBookingServiceClient(conn),
+				}
+				h.peerAlive[p.ID] = true
 				h.mu.Unlock()
-				return
+				log.Printf("[Node %d] Successfully connected to peer Node %d", h.Config.Node.ID, p.ID)
+			} else {
+				log.Printf("[Node %d] Connection to Node %d failed, will retry: %v", h.Config.Node.ID, p.ID, err)
 			}
-
-			h.mu.Lock()
-			h.peerConns[p.ID] = conn
-			h.peerClients[p.ID] = &PeerClients{
-				Election: pb.NewElectionServiceClient(conn),
-				Mutex:    pb.NewMutexServiceClient(conn),
-				Booking:  pb.NewBookingServiceClient(conn),
-			}
-			h.peerAlive[p.ID] = true
-			h.mu.Unlock()
-
-			log.Printf("[Node %d] Connected to peer Node %d", h.Config.Node.ID, p.ID)
-		}(peer)
+		}
+		// Wait before next retry attempt
+		time.Sleep(5 * time.Second)
 	}
-	wg.Wait()
 }
 
 // ConnectToPeer establishes or re-establishes a connection to a specific peer.
@@ -211,15 +216,13 @@ func (h *Hub) GetPeerClients(nodeID int32) *PeerClients {
 	return h.peerClients[nodeID]
 }
 
-// GetAllPeerClients returns a map of all connected peer clients.
+// GetAllPeerClients returns a map of all peer clients (including offline ones).
 func (h *Hub) GetAllPeerClients() map[int32]*PeerClients {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	result := make(map[int32]*PeerClients)
 	for id, clients := range h.peerClients {
-		if h.peerAlive[id] {
-			result[id] = clients
-		}
+		result[id] = clients
 	}
 	return result
 }
